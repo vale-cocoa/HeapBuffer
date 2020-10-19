@@ -24,7 +24,7 @@
 /// This reference sematics type can be used as underlaying storage of data structures leveraging on a Heap as their
 /// backed storage system.
 final public class HeapBuffer<Element> {
-    private let _sort: (Element, Element) -> Bool
+    let _sort: (Element, Element) -> Bool
     
     private(set) var _elements: UnsafeMutablePointer<Element>
     
@@ -71,33 +71,60 @@ extension HeapBuffer {
     /// - Complexity: O(1)
     public var isEmpty: Bool { _elementsCount == 0 }
     
+    /// The position of the first element in a nonempty HeapBuffer.
+    ///
+    /// For an instance of `HeapBuffer`, `startIndex` is always zero. If the HeapBuffer
+    /// is empty, `startIndex` is equal to `endIndex`
+    public var startIndex: Int { 0 }
+    
+    /// The HeapBuffer's "past the end" position---that is, the position one greater
+    /// than the last valid subscript argument.
+    ///
+    /// When you need a range that includes the last element of an HepBuffer, use the
+    /// half-open range operator (`..<`) with `endIndex`. The `..<` operator
+    /// creates a range that doesn't include the upper bound, so it's always
+    /// safe to use with `endIndex`. For example:
+    ///
+    ///     let heapMin = HeapBuffer([10, 20, 30, 40, 50], heapType: .minHeap)
+    ///     for i in 3..<heapMin.endIndex {
+    ///         print(heapMin[i])
+    ///     }
+    ///     // Prints "[30, 40, 50]"
+    ///
+    /// If the HeapBuffer is empty, `endIndex` is equal to `startIndex`.
+    public var endIndex: Int { _elementsCount }
+    
     /// Returns a new `HeapBuffer` instance initialized to use the given sort, and containing the elements of the given
     /// sequence.
     ///
     /// - Parameter _: a sequence of elements to store.
     /// - Parameter sort:   a closure that given two elements returns either `true` if they are sorted, or `false`
     ///                     if they aren't sorted.
-    /// - Returns:  a new `HeapBuffer` isntance initialized to use the given sort and storing all the elements
+    /// - Returns:  a new `HeapBuffer` instance initialized to use the given sort and storing all the elements
     ///             of the given sequence, heap ordered as dictated by the sort criteria.
     /// - Complexity: O(log *n*) where *n* is the number of elements stored in the given sequence.
     public convenience init<S: Sequence>(_ elements: S, sort: @escaping (Element, Element) -> Bool) where S.Iterator.Element == Element {
         self.init(elements.underestimatedCount, sort: sort)
         
         // copy elements from contiguous storage buffer in case the sequence provides it:
-        if
-            let _ = elements
-                .withContiguousStorageIfAvailable({ buffer -> Bool in
-                    if buffer.baseAddress != nil && buffer.count == 0 {
-                        // we've got elements in the storage to copy:
-                        self._capacity = Self._convenientCapacityFor(capacity: buffer.count)
+        if let _ = elements
+            .withContiguousStorageIfAvailable({ buffer -> Bool in
+                if buffer.baseAddress != nil && buffer.count != 0 {
+                    // we've got elements in the storage to copy…
+                    // let's first calculate the effective capacity needed:
+                    let effectiveCapacity = Self._convenientCapacityFor(capacity: buffer.count)
+                    // check if we have to increase underlaying capacity:
+                    if self._capacity < effectiveCapacity {
                         self._elements.deallocate()
-                        self._elements = UnsafeMutablePointer<Element>.allocate(capacity: self._capacity)
-                        self._elements.initialize(from: buffer.baseAddress!, count: buffer.count)
-                        self._elementsCount = buffer.count
+                        self._elements = UnsafeMutablePointer<Element>.allocate(capacity: effectiveCapacity)
+                        self._capacity = effectiveCapacity
                     }
-                    
-                    return true
-                })
+                    self._elements.initialize(from: buffer.baseAddress!, count: buffer.count)
+                    self._elementsCount = buffer.count
+                }
+                
+                return true
+            })
         {
             // the copy from contiguous buffer went fine. We now need to turn it into a
             // Heap and then we're done.
@@ -105,7 +132,8 @@ extension HeapBuffer {
             
             return
         }
-        // We might as well have to insert elements from the sequence iteratively…
+        // Otherwise we might as well have to insert elements from
+        // the given sequence iteratively…
         var iter = elements.makeIterator()
         if let firstElement = iter.next() {
             // yes we do…
@@ -140,6 +168,28 @@ extension HeapBuffer {
         _resizeElements(to: newCapacity)
     }
     
+    /// Calls the given closure on each element in the storage in the same order as a for-in loop.
+    ///
+    /// The two loops in the following example produce the same output:
+    /// ```
+    /// let numbers = HeapBuffer(elements: [1, 2, 3], sort: <)
+    /// for i in numbers.startIndex..<numbers.endIndex {
+    ///    print(numbers[i])
+    /// }
+    /// // Prints 1
+    /// // Prints 2
+    /// // Prints 3
+    ///
+    /// numbers.forEach { number in
+    ///     print(number)
+    /// }
+    /// // Same as above
+    /// ```
+    /// Using the forEach method is distinct from a for-in loop in two important ways:
+    /// 1. You cannot use a break or continue statement to exit the current call of the body closure or skip subsequent calls.
+    /// 2. Using the return statement in the body closure will exit only from the current call to body, not from any outer
+    /// scope, and won’t skip subsequent calls.
+    /// - Parameter _: A closure that takes an element of the storage as a parameter.
     public func forEach(_ body: (Element) throws -> ()) rethrows {
         try levelOrder(body: body)
     }
@@ -159,7 +209,7 @@ extension HeapBuffer {
         return _elements.pointee
     }
     
-    /// Stores specified element, maintenining the heap property.
+    /// Stores specified element, maintaining the heap property.
     ///
     /// - Parameter _: the new element to store in the heap.
     /// - Complexity: O(log *n*) where *n* is the count of elements stored in the buffer after the insertion.
@@ -170,7 +220,7 @@ extension HeapBuffer {
         _siftUp(from: _elementsCount - 1)
     }
     
-    /// Stores specified element, mainteinig the heap property.
+    /// Stores specified element, maintaining the heap property.
     ///
     /// - Parameter _: the new element to store in the heap.
     /// - Complexity: O(log *n*) where *n* is the count of elements stored in the buffer after the insertion.
@@ -179,11 +229,11 @@ extension HeapBuffer {
         push(newElement)
     }
     
-    /// Insert given new element at specified position, maintening the heap property.
+    /// Insert given new element at specified position, maintaining the heap property.
     ///
     /// - Parameter _: the element to insert
     /// - Parameter at: the `index` position where to insert the new element, **must not be negative** and
-    ///                 in range of `0...count`.
+    ///                 in range `startIndex...endIndex` of the instance.
     /// - Complexity: O(log *n*) where *n* is the count of stored elements after the insertion.
     public func insert(_ newElement: Element, at idx: Int) {
         precondition(idx >= 0 && idx <= _elementsCount)
@@ -209,14 +259,6 @@ extension HeapBuffer {
             return
         }
         
-        guard idx != _elementsCount else {
-            _elements.advanced(by: _elementsCount).initialize(to: newElement)
-            _elementsCount += 1
-            _siftUp(from: _elementsCount - 1)
-            
-            return
-        }
-        
         let shiftedCount = _elementsCount - idx
         let tmp = UnsafeMutablePointer<Element>.allocate(capacity: shiftedCount)
         tmp.moveInitialize(from: _elements.advanced(by: idx), count: shiftedCount)
@@ -224,29 +266,27 @@ extension HeapBuffer {
         tmp.deallocate()
         _elements.advanced(by: idx).initialize(to: newElement)
         _elementsCount += 1
-        if idx == 0 {
-            _siftDown(from: 0)
-        } else {
-            _buildHeap()
-        }
+        _buildHeap()
     }
     
-    /// Eventually removes and returns the root of the heap, mainteining the heap property.
+    /// Eventually removes and returns the root of the heap, maintaining the heap property.
     ///
     /// - Returns: the root element when not empty, otherwise `nil`.
     /// - Note: when not empty removes and returns the element stored at index `0`.
     /// - Complexity: O(log *n*) where *n* is the count of stored elements after the removal.
+    @discardableResult
     public func extract() -> Element? {
         guard !isEmpty else { return nil }
         
         return pop()
     }
     
-    /// Removes and then returns the root of the heap, maintening the heap property.
+    /// Removes and then returns the root of the heap, maintaining the heap property.
     /// Callee **must not be empty**.
     ///
     /// - Returns: the root element.
     /// - Complexity: O(log *n*) where *n* is the count of stored elements after the removal.
+    @discardableResult
     public func pop() -> Element {
         precondition(!isEmpty)
         
@@ -261,14 +301,15 @@ extension HeapBuffer {
         return element
     }
     
-    /// Removes and returns the element at specified index, maintening the heap property.
+    /// Removes and returns the element at specified index, maintaining the heap property.
     /// **Callee must not be empty**.
     ///
-    /// - Parameter at: the index of the element to remove. Must not be negative and contained in
-    ///                 range: `0..<count`.
+    /// - Parameter at: the index of the element to remove. Must not be negative and in
+    ///                 range `startIndex..<endIndex` of the instance.
     /// - Returns: the element stored at given index.
     /// - Note: when given `0` as index value, returns the same element of `pop()`.
     /// - Complexity :  O(log *n*) where *n* is the count of stored elements after the removal.
+    @discardableResult
     public func remove(at index: Int) -> Element {
         _checkSubscriptBounds(on: index)
         if index == _elementsCount - 1 {
@@ -293,11 +334,12 @@ extension HeapBuffer {
         return element
     }
     
-    /// Inserts the specified element in the heap mainteining the heap property, than pops the root element.
+    /// Inserts the specified element in the heap maintaining the heap property, than pops the root element.
     ///
     /// - Parameter _: the element to store
     /// - Returns: the topmost element of the heap.
     /// - Complexity: O(log *n*) where *n* is the count of stored elements.
+    @discardableResult
     public func pushPop(_ newElement: Element) -> Element {
         guard !isEmpty && !_sort(newElement, _elements[0])
             else { return newElement }
@@ -317,6 +359,7 @@ extension HeapBuffer {
     /// - Parameter _: the new element replacing the root one.
     /// - Returns: the former root element.
     /// - Complexity: O(log *n*) where *n* is the count of stored elements.
+    @discardableResult
     public func replace(_ newElement: Element) -> Element {
         precondition(!isEmpty)
         
@@ -333,7 +376,8 @@ extension HeapBuffer {
     ///
     /// - Parameter _:  an `Int` value representing the `index` of the element to access.
     ///                 The range of possible indexes is zero-based —i.e. first element stored is at index 0.
-    ///                 Must be greater than or equal `0` and less than `count` value of the instance.
+    ///                 Must be greater than or equal `startIndex` and less than `endIndex` value of
+    ///                 the instance.
     ///                 **When isEmpty is true, no index value is valid for subscript.**
     /// - Complexity:   O(1) for read access, O(log *n*) for write access where *n* is the count of stored elements.
     public subscript(_ position: Int) -> Element {
@@ -355,6 +399,74 @@ extension HeapBuffer {
         }
     }
     
+    /// Calls a closure with a pointer to the HeapBuffer contiguous storage.
+    ///
+    /// Often, the optimizer can eliminate bounds checks within an HeapBuffer
+    /// algorithm, but when that fails, invoking the same algorithm on the
+    /// buffer pointer passed into your closure lets you trade safety for speed.
+    ///
+    /// The pointer passed as an argument to `body` is valid only during the
+    /// execution of `withUnsafeBufferPointer(_:)`. Do not store or return the
+    /// pointer for later use.
+    ///
+    /// - Parameter body:   A closure with an `UnsafeBufferPointer` parameter that
+    ///                     points to the contiguous storage for the HeapBuffer.  If no such storage exists, it is
+    ///                     created. If `body` has a return value, that value is also used as the return value
+    ///                     for the `withUnsafeBufferPointer(_:)` method. The pointer argument is
+    ///                     valid only for the duration of the method's execution.
+    /// - Returns: The return value, if any, of the `body` closure parameter.
+    public func withUnsafeBufferPointer<R>(_ body: (UnsafeBufferPointer<Element>) throws -> R ) rethrows -> R {
+        let buff = UnsafeBufferPointer<Element>(start: self._elements, count: self._elementsCount)
+            
+        return try body(buff)
+    }
+    
+    /// Calls the given closure with a pointer to the HeapBuffer's mutable contiguous
+    /// storage, restoring the heap property at the end of the operation.
+    ///
+    /// Often, the optimizer can eliminate bounds checks within an HeapBuffer
+    /// algorithm, but when that fails, invoking the same algorithm on the
+    /// buffer pointer passed into your closure lets you trade safety for speed.
+    /// Moreover this method allows the manipulation of the stored elements without the overhead
+    ///  of restoring the Heap Property after each element is mutated.
+    /// The Heap Property will be restored instead after `withUnsafeMutableBufferPointer` execution.
+    ///
+    /// The pointer passed as an argument to `body` is valid only during the
+    /// execution of `withUnsafeMutableBufferPointer(_:)`. Do not store or
+    /// return the pointer for later use.
+    ///
+    /// - Warning:  Do not rely on anything about the HeapBuffer that is the target of
+    ///             this method during execution of the `body` closure; it might not
+    ///             appear to have its correct value. Instead, use only the
+    ///             `UnsafeMutableBufferPointer` argument to `body`.
+    ///
+    /// - Parameter body:   A closure with an `UnsafeMutableBufferPointer`
+    ///                     parameter that points to the contiguous storage for the HeapBuffer.
+    ///                     If no such storage exists, it is created. If `body` has a return value, that value is also
+    ///                     used as the return value for the `withUnsafeMutableBufferPointer(_:)`
+    ///                     method. The pointer argument is valid only for the duration of the
+    ///                     method's execution.
+    /// - Returns: The return value, if any, of the `body` closure parameter.
+    public func withUnsafeMutableBufferPointer<R>(_ body: (inout UnsafeMutableBufferPointer<Element>) throws -> R) rethrows -> R {
+        let originalElements = _elements
+        let originalCount = _elementsCount
+        let originalCapacity = _capacity
+        var buff = UnsafeMutableBufferPointer(start: originalElements, count: originalCount)
+        _elements = UnsafeMutablePointer<Element>.allocate(capacity: Self._minCapacity)
+        _elementsCount = 0
+        _capacity = Self._minCapacity
+        defer {
+            precondition(buff.baseAddress == originalElements && buff.count == originalCount, "HeapBuffer withUnsafeMutableBufferPointer: replacing the buffer is not allowed")
+            _elements.deallocate()
+            _elements = originalElements
+            _capacity = originalCapacity
+            _elementsCount = originalCount
+            _buildHeap()
+        }
+        
+        return try body(&buff)
+    }
+    
 }
 
 // MARK: - Heap traversing
@@ -363,12 +475,11 @@ extension HeapBuffer {
     /// the specified closure.
     ///
     /// - Parameter from:   the `index` position from where the traverse should start.
-    ///                     **Must not be negative**, defaults to `0`.
+    ///                     **Must not be negative**, defaults to `startIndex`.
     /// - Parameter body: a closure to execute with each element encountered on the traverse.
-    /// - Throws : rethrows the same error eventually thrown by the specified throwing closure.
     public func postOrder(from idx: Int = 0, body: (Element) throws ->  ()) rethrows {
         precondition(idx >= 0)
-        guard _isInSubscriptBounds(idx) else { return }
+        guard !isEmpty && idx < _elementsCount else { return }
         
         let leftChild = _leftChildIndexOf(parentAt: idx)
         try postOrder(from: leftChild, body: body)
@@ -383,12 +494,11 @@ extension HeapBuffer {
     /// the specified closure.
     ///
     /// - Parameter from:   the `index` position from where the traverse should start.
-    ///                     **Must not be negative**, defaults to `0`.
+    ///                     **Must not be negative**, defaults to `startIndex`.
     /// - Parameter body: a closure to execute with each element encountered on the traverse.
-    /// - Throws : rethrows the same error eventually thrown by the specified throwing closure.
     public func inOrder(from idx: Int = 0, body: (Element) throws -> ()) rethrows {
         precondition(idx >= 0)
-        guard _isInSubscriptBounds(idx) else { return }
+        guard !isEmpty && idx < _elementsCount else { return }
         
         let leftChild = _leftChildIndexOf(parentAt: idx)
         try inOrder(from: leftChild, body: body)
@@ -403,12 +513,11 @@ extension HeapBuffer {
     /// the specified closure.
     ///
     /// - Parameter from:   the `index` position from where the traverse should start.
-    ///                     **Must not be negative**, defaults to `0`.
+    ///                     **Must not be negative**, defaults to `startIndex`.
     /// - Parameter body: a closure to execute with each element encountered on the traverse.
-    /// - Throws : rethrows the same error eventually thrown by the specified throwing closure.
     public func preOrder(from idx: Int = 0, body: (Element) throws -> ()) rethrows {
         precondition(idx >= 0)
-        guard _isInSubscriptBounds(idx) else { return }
+        guard !isEmpty && idx < _elementsCount else { return }
         
         try body(_elements[idx])
         
@@ -423,17 +532,17 @@ extension HeapBuffer {
     /// each one the specified closure.
     ///
     /// - Parameter from:   the `index` position from where the traverse should start.
-    ///                     **Must not be negative**, defaults to `0`.
+    ///                     **Must not be negative**, defaults to `startIndex`.
     /// - Parameter body: a closure to execute with each element encountered on the traverse.
-    /// - Throws : rethrows the same error eventually thrown by the specified throwing closure.
     public func levelOrder(from idx: Int = 0, body: (Element) throws -> ()) rethrows {
         precondition(idx >= 0)
-        guard _isInSubscriptBounds(idx) else { return }
+        guard !isEmpty && idx < _elementsCount else { return }
         
         for i in idx..<_elementsCount {
             try body(_elements[i])
         }
     }
+    
 }
 
 extension HeapBuffer where Element: Equatable {
@@ -442,14 +551,12 @@ extension HeapBuffer where Element: Equatable {
     ///
     /// - Parameter _: the element to look for.
     /// - Parameter startingAt: the `index` position where to start searching for the specified element.
-    ///                         **Must not be negative and in range:** `0..<count`.
+    ///                         **Must not be negative **, defaults to `startIndex`.
     /// - Returns:  the index position of the specified element if it is stored between the the specified index and the last
     ///             stored element, otherwise `nil`
-    public func indexOf(_ element: Element, startingAt i: Int) -> Int? {
+    public func indexOf(_ element: Element, startingAt i: Int = 0) -> Int? {
         precondition(i >= 0)
-        guard !isEmpty else { return nil }
-        
-        guard i < _elementsCount else { return nil }
+        guard !isEmpty && i < _elementsCount else { return nil }
         
         if _sort(element, _elements[i]) { return nil }
         
@@ -535,6 +642,8 @@ extension HeapBuffer {
     
     @inline(__always)
     private func _swapElementsAt(_ lhs: Int, _ rhs: Int) {
+        guard lhs != rhs else { return }
+        
         swap(&_elements.advanced(by: lhs).pointee, &_elements.advanced(by: rhs).pointee)
     }
     
