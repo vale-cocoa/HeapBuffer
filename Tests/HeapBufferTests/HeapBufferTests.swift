@@ -338,7 +338,7 @@ final class HeapBufferTests: XCTestCase {
         XCTAssertNil(sut?._elements)
     }
     
-    // MARK: - copy() tests
+    // MARK: - copy(reservingCapacity:) tests
     func testCopy() {
         // To check that both copies uses same sort closure, we can let it capture
         // an Int global var which gets incremented at each call:
@@ -366,6 +366,40 @@ final class HeapBufferTests: XCTestCase {
         // We also check that the same operation produced the same effect
         // on both instances:
         XCTAssertTrue(UnsafeBufferPointer(start: sut._elements, count: sut._elementsCount).elementsEqual(UnsafeBufferPointer(start: copy._elements, count: copy._elementsCount)))
+    }
+    
+    func testCopy_whenReservingCapacityIsGreaterThanZero() {
+        // when reservingCapacity is less than or equal the capacity left, doesn't
+        // increase capacity:
+        var reserveCapacity = sut._capacity - sut._elementsCount
+        XCTAssertGreaterThanOrEqual(reserveCapacity, 0)
+        var copy = sut.copy(reservingCapacity: reserveCapacity)
+        XCTAssertEqual(copy._capacity, sut._capacity)
+        
+        let notEmptyElements = [1, 2, 3, 4, 5].shuffled()
+        sut = HeapBuffer(notEmptyElements, heapType: .maxHeap)
+        reserveCapacity = sut._capacity - sut._elementsCount
+        XCTAssertGreaterThanOrEqual(reserveCapacity, 0)
+        copy = sut.copy(reservingCapacity: reserveCapacity)
+        XCTAssertEqual(copy._capacity, sut._capacity)
+        // let's also test with a different sort:
+        sut = HeapBuffer(notEmptyElements, heapType: .minHeap)
+        copy = sut.copy(reservingCapacity: reserveCapacity)
+        XCTAssertEqual(copy._capacity, sut._capacity)
+        
+        // when reservingCapacity is greater than the capacity left, copy has
+        // increased capacity so its capacity left can hold that count:
+        sut = HeapBuffer(notEmptyElements, heapType: .maxHeap)
+        reserveCapacity = sut._capacity - sut._elementsCount + 1
+        XCTAssertGreaterThanOrEqual(reserveCapacity, 0)
+        copy = sut.copy(reservingCapacity: reserveCapacity)
+        XCTAssertGreaterThan(copy._capacity, sut._capacity)
+        XCTAssertGreaterThanOrEqual(copy._capacity - copy._elementsCount, reserveCapacity)
+        // let's also test with a different sort:
+        sut = HeapBuffer(notEmptyElements, heapType: .minHeap)
+        copy = sut.copy(reservingCapacity: reserveCapacity)
+        XCTAssertGreaterThan(copy._capacity, sut._capacity)
+        XCTAssertGreaterThanOrEqual(copy._capacity - copy._elementsCount, reserveCapacity)
     }
     
     // MARK: - count, isEmpty, startIndex and endIndex variables tests
@@ -997,19 +1031,19 @@ final class HeapBufferTests: XCTestCase {
     
     // MARK: - Performance tests
     func testPerformanceOfBufferHeapOnSmallCount() {
-        measure(performanceLoopHeapBufferSmallCount)
+        //measure(performanceLoopHeapBufferSmallCount)
     }
     
     func testPerformanceSortedArrayOnSmallCount() {
-        measure(performanceLoopSortedArraySmallCount)
+        //measure(performanceLoopSortedArraySmallCount)
     }
     
     func testPerformanceOfBufferHeapOnLargeCount() {
-        measure(performanceLoopHeapBufferLargeCount)
+        //measure(performanceLoopHeapBufferLargeCount)
     }
     
     func testPerformanceSortedArrayOnLargeCount() {
-        measure(performanceLoopSortedArrayLargeCount)
+        //measure(performanceLoopSortedArrayLargeCount)
     }
     
     // MARK: - Helpers

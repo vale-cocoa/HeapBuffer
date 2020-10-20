@@ -148,12 +148,18 @@ extension HeapBuffer {
         }
     }
     
-    /// Creates and returns a copy of the callee.
+    /// Creates and returns a copy of the callee, eventually incresasing the free contiguous storage of the returned instance
+    /// so it can additionally hold the specified number of elements.
     ///
+    /// - Parameter reservingCapacity:  the amount of minimum free slots the copy must be able to store.
+    ///                                 **Must be positive**, defaults to `0`.
     /// - Returns:  a new `HeapBuffer` instance contianing the same elements of the callee, using the same
-    ///             sort criteria.
-    public func copy() -> Self {
-        Self.init(from: self)
+    ///             sort criteria and with at least the specified number of free slots in its storage.
+    public func copy(reservingCapacity minCapacity: Int = 0) -> Self {
+        precondition(minCapacity >= 0)
+        let additionalCapacity = _capacityLeft >= minCapacity ? 0 : minCapacity - _capacityLeft
+        
+        return Self.init(from: self, additionalCapacity: additionalCapacity)
     }
     
     /// Eventually increases callee capacity, so it will have free contiguous storage for the given count of elements.
@@ -632,8 +638,9 @@ extension HeapBuffer where Element: Comparable {
 // MARK: - Private Interface
 // MARK: - Generic helpers
 extension HeapBuffer {
-    private convenience init(from other: HeapBuffer) {
-        self.init(other._capacity, sort: other._sort)
+    private convenience init(from other: HeapBuffer, additionalCapacity: Int = 0) {
+        precondition(additionalCapacity >= 0)
+        self.init(other._capacity + additionalCapacity, sort: other._sort)
         _elementsCount = other._elementsCount
         if other._elementsCount > 0 {
             _elements.initialize(from: other._elements, count: other._elementsCount)
