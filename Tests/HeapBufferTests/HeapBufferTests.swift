@@ -1031,19 +1031,19 @@ final class HeapBufferTests: XCTestCase {
     
     // MARK: - Performance tests
     func testPerformanceOfBufferHeapOnSmallCount() {
-        //measure(performanceLoopHeapBufferSmallCount)
+        measure(performanceLoopHeapBufferSmallCount)
     }
     
     func testPerformanceSortedArrayOnSmallCount() {
-        //measure(performanceLoopSortedArraySmallCount)
+        measure(performanceLoopSortedArraySmallCount)
     }
     
     func testPerformanceOfBufferHeapOnLargeCount() {
-        //measure(performanceLoopHeapBufferLargeCount)
+        measure(performanceLoopHeapBufferLargeCount)
     }
     
     func testPerformanceSortedArrayOnLargeCount() {
-        //measure(performanceLoopSortedArrayLargeCount)
+        measure(performanceLoopSortedArrayLargeCount)
     }
     
     // MARK: - Helpers
