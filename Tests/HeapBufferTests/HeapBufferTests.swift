@@ -564,6 +564,78 @@ final class HeapBufferTests: XCTestCase {
         }
     }
     
+    // MARK: - insert(elements:at:) tests
+    func testInsertCollectionAt_incrementsCountByCollectionsCount() {
+        let newElements = [10, 20, 30, 40, 50].shuffled()
+        let notEmptyElements = [1, 2, 3, 4, 5].shuffled()
+        
+        var prevCount = sut.count
+        sut.insert(elements: [], at: sut.startIndex)
+        XCTAssertEqual(sut.count, prevCount)
+        
+        for i in 0..<notEmptyElements.count {
+            sut = HeapBuffer(notEmptyElements, heapType: .maxHeap)
+            prevCount = sut.count
+            sut.insert(elements: newElements, at: i)
+            XCTAssertEqual(sut.count, prevCount + newElements.count)
+        }
+        
+        // let's also test with another sort:
+        for i in 0...notEmptyElements.count {
+            sut = HeapBuffer(notEmptyElements, heapType: .maxHeap)
+            prevCount = sut.count
+            sut.insert(elements: newElements, at: i)
+            XCTAssertEqual(sut.count, prevCount + newElements.count)
+        }
+    }
+    
+    func testInsertCollectionAt_insertsCollectionsElementsMaintainingHeapProperty() {
+        let newElements = [10, 20, 30, 40, 50].shuffled()
+        let notEmptyElements = [1, 2, 3, 4, 5].shuffled()
+        
+        sut.withUnsafeBufferPointer { buff in
+            for i in 0..<newElements.count {
+                XCTAssertFalse(buff.contains(newElements[i]))
+            }
+        }
+        sut.insert(elements: newElements, at: sut.startIndex)
+        sut.withUnsafeBufferPointer { buff in
+            for i in 0..<newElements.count {
+                XCTAssertTrue(buff.contains(newElements[i]))
+            }
+        }
+        assertHeapProperty()
+        
+        for i in 0...notEmptyElements.count {
+            sut = HeapBuffer(notEmptyElements, heapType: .maxHeap)
+            sut.insert(elements: newElements, at: i)
+            sut.withUnsafeBufferPointer { buff in
+                for i in 0..<newElements.count {
+                    XCTAssertTrue(buff.contains(newElements[i]))
+                }
+                for i in 0..<notEmptyElements.count {
+                    XCTAssertTrue(buff.contains(notEmptyElements[i]))
+                }
+            }
+            assertHeapProperty()
+        }
+        
+        // let's also test with another sort:
+        for i in 0...notEmptyElements.count {
+            sut = HeapBuffer(notEmptyElements, heapType: .minHeap)
+            sut.insert(elements: newElements, at: i)
+            sut.withUnsafeBufferPointer { buff in
+                for i in 0..<newElements.count {
+                    XCTAssertTrue(buff.contains(newElements[i]))
+                }
+                for i in 0..<notEmptyElements.count {
+                    XCTAssertTrue(buff.contains(notEmptyElements[i]))
+                }
+            }
+            assertHeapProperty()
+        }
+    }
+    
     // MARK: - extract() and pop() tests
     // extract() uses pop() when isEmpty == false, hence pop() will be tested too.
     func testExtract_whenEmpty_returnsNil() {

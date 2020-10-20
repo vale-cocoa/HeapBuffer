@@ -275,6 +275,50 @@ extension HeapBuffer {
         _buildHeap()
     }
     
+    /// Inserts given collection of elements at specified index, maintaining the heap property.
+    ///
+    /// - Parameter elements: a collection of elements to insert in the callee.
+    /// - Parameter at: the index of the callee where to start to insert the elements. **Must be positive** and in
+    ///                 range `startIndex...endIndex` of the instance.
+    /// - Complexity:   O(log *n*) where *n* is the count of elements of the instance after the insertion,
+    ///                 when the given collection implements `withContiguousStorageIfAvailable(_:)`
+    ///                 method, otherwise O(*k*\times log *n*) where *k* is the count of the elements in the given
+    ///                 collection, and *n* is the count of elements of the instance after the insertion.
+    public func insert<C: Collection>(elements newElements: C, at idx: Int) where C.Iterator.Element == Element {
+        precondition(idx >= 0 && idx <= _elementsCount)
+        
+        guard !newElements.isEmpty else { return }
+        
+        let newCapacity = Self._convenientCapacityFor(capacity: _elementsCount + newElements.count)
+        // copy newElements inside the newBuffer:
+        let newBuff = UnsafeMutablePointer<Element>.allocate(capacity: newCapacity)
+        let done: Bool = newElements
+            .withContiguousStorageIfAvailable {  buff in
+                guard
+                    buff.baseAddress != nil && buff.count != 0
+                else { return false }
+                
+                newBuff.advanced(by: idx).initialize(from: buff.baseAddress!, count: buff.count)
+                
+                return true
+            } ?? false
+        if !done {
+            var i = 0
+            for newElement in newElements {
+                newBuff.advanced(by: idx + i).initialize(to: newElement)
+                i += 1
+            }
+        }
+        // move _elements into newBuffer:
+        newBuff.moveInitialize(from: _elements, count: idx)
+        newBuff.advanced(by: idx + newElements.count).moveInitialize(from: _elements.advanced(by: idx), count: _elementsCount - idx)
+        _elements.deallocate()
+        _elements = newBuff
+        _capacity = newCapacity
+        _elementsCount += newElements.count
+        _buildHeap()
+    }
+    
     /// Eventually removes and returns the root of the heap, maintaining the heap property.
     ///
     /// - Returns: the root element when not empty, otherwise `nil`.
