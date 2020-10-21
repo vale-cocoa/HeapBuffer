@@ -384,6 +384,67 @@ extension HeapBuffer {
         return element
     }
     
+    /// Removes and returns given count of elements from storage starting from the specified index, eventually
+    /// keeping the storage capacity, and maintainig the heap property.
+    ///
+    /// - Parameter at:     the index where to start the removal. **Must not be negative** and in range
+    ///                     `startIndex..<endIndex` for the instance.
+    /// - Parameter count:  the number of elements to remove.
+    ///                     **Must not be negative and less tha or equal the number of elelemnts stored **
+    ///                     **between the specified index and the last one**
+    /// - Parameter keepingCapacity:    flags if storage capacity has to be kept after the removal or
+    ///                                 should be reduced. Defaults to `false`
+    /// - Returns:  an array containing the removed elements appearing in the same order
+    ///             they were stored inside the storage.
+    /// - Complexity: O(log *n*) where *n* is the count of elements after the removal.
+    @discardableResult
+    public func remove(at idx: Int, count k: Int, keepingCapacity: Bool = false) -> [Element] {
+        precondition(idx >= 0 && idx < _elementsCount)
+        precondition(k >= 0 && k <= _elementsCount - idx)
+        guard
+            k != 0
+        else {
+            defer {
+                if !keepingCapacity { _reduceCapacityToCurrentCount() }
+            }
+            
+            return []
+        }
+        
+        if idx == 0 && k == _elementsCount {
+            // we ought remove all elements!
+            defer {
+                _elements.deinitialize(count: _elementsCount)
+                _elementsCount = 0
+                if !keepingCapacity {
+                    _elements.deallocate()
+                    _elements = UnsafeMutablePointer<Element>.allocate(capacity: Self._minCapacity)
+                    _capacity = Self._minCapacity
+                }
+            }
+            
+            return Array(UnsafeMutableBufferPointer(start: _elements, count: _elementsCount))
+        }
+        
+        // we ought remove some elements
+        defer {
+            let newCapacity = keepingCapacity ? _capacity : Self._convenientCapacityFor(capacity: _elementsCount - k)
+            let newBuff = UnsafeMutablePointer<Element>.allocate(capacity: newCapacity)
+            newBuff.moveInitialize(from: _elements.advanced(by: 0), count: idx)
+            let remainderCount = _elementsCount - (idx + k)
+            newBuff.advanced(by: idx).moveInitialize(from: _elements.advanced(by: idx + k), count: remainderCount)
+            _elements.deallocate()
+            _elements = newBuff
+            _capacity = newCapacity
+            _elementsCount -= k
+            _buildHeap()
+        }
+        let resultPointer = UnsafeMutablePointer<Element>.allocate(capacity: k)
+        resultPointer.moveInitialize(from: _elements.advanced(by: idx), count: k)
+        
+        return Array(UnsafeMutableBufferPointer(start: resultPointer, count: k))
+    }
+    
     /// Inserts the specified element in the heap maintaining the heap property, than pops the root element.
     ///
     /// - Parameter _: the element to store
@@ -420,6 +481,64 @@ extension HeapBuffer {
         }
         
         return result
+    }
+    
+    /// Replaces elements in the storage at the specified subrange with contents from given collection of new elements,
+    /// maintaining the heap property.
+    ///
+    /// - Parameter subrange:   a range expression representing the indexes of elements to replace.
+    ///                         **Must be contained or equal to range** `startIndex...endIndex` for
+    ///                         the instance.
+    /// - Parameter with: a collection of new elements to insert in place of the removed ones.
+    /// - Complexity:   O(log *n*) where *n* is the count of elements resulting by the replace operation when
+    ///                 the given collection implements `withContiguousStorageIfAvailable(_:)`,
+    ///                 otherwise O(*k*\times log *n*) where *k* is the count of elements in the given collection,
+    ///                 and *n* is the count of elements resulting by the replace operation.
+    public func replace<C: Collection>(subrange: Range<Int>, with newElements: C) where C.Iterator.Element == Element {
+        precondition(subrange.lowerBound >= 0 && subrange.upperBound <= _elementsCount, "range of indexes out of bounds")
+        if subrange.count == 0 {
+            // It's an insertion
+            guard !newElements.isEmpty else { return }
+            
+            insert(elements: newElements, at: subrange.lowerBound)
+        } else {
+            // subrange count is greater than zero…
+            if newElements.isEmpty {
+                // but newElements is empty, though it's a delete operation:
+                remove(at: subrange.lowerBound, count: subrange.count)
+            } else {
+                // newElements is not empty, it's effectively a replace operation:
+                let newCount = _elementsCount - subrange.count + newElements.count
+                let newCapacity = Self._convenientCapacityFor(capacity: newCount)
+                let newBuff = UnsafeMutablePointer<Element>.allocate(capacity: newCapacity)
+                
+                // move into newBuff newElements in the right position:
+                let done = newElements.withContiguousStorageIfAvailable { storage in
+                    guard storage.baseAddress != nil && storage.count > 0
+                    else { return false}
+                    newBuff.advanced(by: subrange.lowerBound).initialize(from: storage.baseAddress!, count: storage.count)
+                    
+                    return true
+                } ?? false
+                if !done {
+                    var adv = subrange.lowerBound
+                    for newElement in newElements {
+                        newBuff.advanced(by: adv).initialize(to: newElement)
+                        adv += 1
+                    }
+                }
+                
+                // move from _elements to newBuffer only the elements kept
+                newBuff.moveInitialize(from: _elements, count: subrange.lowerBound)
+                let remainderCount = _elementsCount - (subrange.lowerBound + subrange.count)
+                newBuff.advanced(by: subrange.lowerBound + newElements.count).moveInitialize(from: _elements.advanced(by: subrange.lowerBound + subrange.count), count: remainderCount)
+                _elements.deallocate()
+                _elements = newBuff
+                _capacity = newCapacity
+                _elementsCount = newCount
+                _buildHeap()
+            }
+        }
     }
     
     /// Access stored element at specified position.

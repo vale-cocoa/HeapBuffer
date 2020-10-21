@@ -716,6 +716,248 @@ final class HeapBufferTests: XCTestCase {
         }
     }
     
+    // MARK: - remove(at:count:) tests
+    func testRemoveAtCount_whenIdxIsEqualToStartIndexAndCountIsEqualToElementsCount_thenRemovesAndReturnsAllElements() {
+        let notEmptyElements = [1, 2, 3, 4, 5].shuffled()
+        sut = HeapBuffer(notEmptyElements, heapType: .maxHeap)
+        var expectedResult = sut.withUnsafeBufferPointer { Array($0) }
+        var result = sut.remove(at: 0, count: sut._elementsCount)
+        XCTAssertTrue(sut.isEmpty)
+        XCTAssertEqual(result, expectedResult)
+        
+        // let's also try with a different sort:
+        sut = HeapBuffer(notEmptyElements, heapType: .minHeap)
+        expectedResult = sut.withUnsafeBufferPointer { Array($0) }
+        result = sut.remove(at: 0, count: sut._elementsCount)
+        XCTAssertTrue(sut.isEmpty)
+        XCTAssertEqual(result, expectedResult)
+    }
+    
+    func testRemoveAtCount_removesAndReturnsKElementsFromIdxMaintainingHeapProperty() {
+        let notEmptyElements = [1, 2, 3, 4, 5].shuffled()
+        let initialCount = notEmptyElements.count
+        for i in 0..<initialCount {
+            for k in 0...(initialCount - i) {
+                let rangeOfRemoval = i..<(i+k)
+                sut = HeapBuffer(notEmptyElements, heapType: .maxHeap)
+                let original = sut.withUnsafeBufferPointer { Array($0) }
+                let expectedResult = Array(original[rangeOfRemoval])
+                let result = sut.remove(at: i, count: k)
+                XCTAssertEqual(sut.count, initialCount - k)
+                XCTAssertEqual(result, expectedResult)
+                sut.withUnsafeBufferPointer { buff in
+                    for removedElement in expectedResult {
+                        XCTAssertFalse(buff.contains(removedElement))
+                    }
+                }
+                assertHeapProperty()
+            }
+        }
+        // let's also test with a different sort:
+        for i in 0..<initialCount {
+            for k in 0...(initialCount - i) {
+                let rangeOfRemoval = i..<(i+k)
+                sut = HeapBuffer(notEmptyElements, heapType: .minHeap)
+                let original = sut.withUnsafeBufferPointer { Array($0) }
+                let expectedResult = Array(original[rangeOfRemoval])
+                let result = sut.remove(at: i, count: k)
+                XCTAssertEqual(sut.count, initialCount - k)
+                XCTAssertEqual(result, expectedResult)
+                sut.withUnsafeBufferPointer { buff in
+                    for removedElement in expectedResult {
+                        XCTAssertFalse(buff.contains(removedElement))
+                    }
+                }
+                assertHeapProperty()
+            }
+        }
+    }
+    
+    func testRemoveAtCount_keepingCapacity() {
+        let notEmptyElements = [1, 2, 3, 4, 5].shuffled()
+        let initialCount = notEmptyElements.count
+        
+        // when keepingCapacity is true, keeps capacity:
+        sut = HeapBuffer(notEmptyElements, heapType: .maxHeap)
+        var prevCapacity = sut._capacity
+        sut.remove(at: 0, count: sut._elementsCount, keepingCapacity: true)
+        XCTAssertEqual(sut._capacity, prevCapacity)
+        // let's also test with a different sort:
+        sut = HeapBuffer(notEmptyElements, heapType: .minHeap)
+        prevCapacity = sut._capacity
+        sut.remove(at: 0, count: sut._elementsCount, keepingCapacity: true)
+        XCTAssertEqual(sut._capacity, prevCapacity)
+        
+        // when keepingCapacity is false, reduces capacity:
+        for i in 0..<initialCount {
+            for k in 1...(initialCount - i) {
+                sut = HeapBuffer(notEmptyElements, heapType: .maxHeap)
+                prevCapacity = sut._capacity
+                sut.remove(at: i, count: k)
+                XCTAssertLessThan(sut._capacity, prevCapacity)
+            }
+        }
+        // let's also test with a different sort:
+        for i in 0..<initialCount {
+            for k in 1...(initialCount - i) {
+                sut = HeapBuffer(notEmptyElements, heapType: .minHeap)
+                prevCapacity = sut._capacity
+                sut.remove(at: i, count: k)
+                XCTAssertLessThan(sut._capacity, prevCapacity)
+            }
+        }
+    }
+    
+    // MARK: - replace(subrange:with:) tests
+    func testReplaceSubrangeWith_whenSubrangeCountIsZero_insertsNewElementsMaintainingHeapProperty() {
+        // let's test when sut and newElements are empty:
+        XCTAssertTrue(sut.isEmpty)
+        let prevElements = sut.withUnsafeBufferPointer { Array($0) }
+        sut.replace(subrange: 0..<0, with: [])
+        XCTAssertEqual(sut.withUnsafeBufferPointer { Array($0) }, prevElements)
+        
+        // when sut is empty and newElements is not empty:
+        let additionalElements = [10, 20, 30, 40, 50].shuffled()
+        sut.replace(subrange: 0..<0, with: additionalElements)
+        XCTAssertEqual(sut.count, additionalElements.count)
+        sut.withUnsafeBufferPointer { buff in
+            for newElement in additionalElements {
+                XCTAssertTrue(buff.contains(newElement))
+            }
+        }
+        assertHeapProperty()
+        
+        let notEmptyElements = [1, 2, 3, 4, 5].shuffled()
+        let allElements = notEmptyElements + additionalElements
+        for i in 0...notEmptyElements.count {
+            // when sut and newElements are not empty:
+            sut = HeapBuffer(notEmptyElements, heapType: .maxHeap)
+            let subrange = i..<i
+            let prevCount = sut.count
+            sut.replace(subrange: subrange, with: additionalElements)
+            XCTAssertGreaterThan(sut.count, prevCount)
+            XCTAssertEqual(sut.count, allElements.count)
+            sut.withUnsafeBufferPointer { buff in
+                for element in allElements {
+                    XCTAssertTrue(buff.contains(element))
+                }
+            }
+            assertHeapProperty()
+            
+            // when sut is not empty and newElements is empty:
+            sut = HeapBuffer(notEmptyElements, heapType: .maxHeap)
+            let prevElements = sut.withUnsafeBufferPointer { Array($0) }
+            sut.replace(subrange: subrange, with: [])
+            XCTAssertEqual(sut.withUnsafeBufferPointer { Array($0) }, prevElements)
+            assertHeapProperty()
+        }
+        
+        // let's also test with a different sort:
+        for i in 0...notEmptyElements.count {
+            // when sut and newElements are not empty:
+            sut = HeapBuffer(notEmptyElements, heapType: .minHeap)
+            let subrange = i..<i
+            let prevCount = sut.count
+            sut.replace(subrange: subrange, with: additionalElements)
+            XCTAssertGreaterThan(sut.count, prevCount)
+            XCTAssertEqual(sut.count, allElements.count)
+            sut.withUnsafeBufferPointer { buff in
+                for element in allElements {
+                    XCTAssertTrue(buff.contains(element))
+                }
+            }
+            assertHeapProperty()
+            
+            // when sut is not empty and newElements is empty:
+            sut = HeapBuffer(notEmptyElements, heapType: .minHeap)
+            let prevElements = sut.withUnsafeBufferPointer { Array($0) }
+            sut.replace(subrange: subrange, with: [])
+            XCTAssertEqual(sut.withUnsafeBufferPointer { Array($0) }, prevElements)
+            assertHeapProperty()
+        }
+    }
+    
+    func testReplaceSubrangeWith_whenSubrangeCountIsGreaterThanZeroAndNewElementsIsEmpty_removesElementsAtSubrangeIndexesMaintainigHeapProperty() {
+        let notEmptyElements = [1, 2, 3, 4, 5].shuffled()
+        for i in 0..<notEmptyElements.count {
+            for k in stride(from: i + 1, through: notEmptyElements.count, by: 1) {
+                let subrange = i..<k
+                sut = HeapBuffer(notEmptyElements, heapType: .maxHeap)
+                let removed = sut.withUnsafeBufferPointer { Array($0[subrange]) }
+                sut.replace(subrange: subrange, with: [])
+                XCTAssertEqual(sut.count, notEmptyElements.count - subrange.count)
+                sut.withUnsafeBufferPointer { buff in
+                    for removedElement in removed {
+                        XCTAssertFalse(buff.contains(removedElement))
+                    }
+                }
+                assertHeapProperty()
+            }
+        }
+        // let's also test with a different sort:
+        for i in 0..<notEmptyElements.count {
+            for k in stride(from: i + 1, through: notEmptyElements.count, by: 1) {
+                let subrange = i..<k
+                sut = HeapBuffer(notEmptyElements, heapType: .minHeap)
+                let removed = sut.withUnsafeBufferPointer { Array($0[subrange]) }
+                sut.replace(subrange: subrange, with: [])
+                XCTAssertEqual(sut.count, notEmptyElements.count - subrange.count)
+                sut.withUnsafeBufferPointer { buff in
+                    for removedElement in removed {
+                        XCTAssertFalse(buff.contains(removedElement))
+                    }
+                }
+                assertHeapProperty()
+            }
+        }
+    }
+    
+    func testReplaceSubrangeWith_whenSubrangeCountAndNewElementsCountAreGreaterThanZero_thenElementsAtSubrangeAreRemovedAndNewElementsIsInsertedMaintainingHeapProperty() {
+        let notEmptyElements = [1, 2, 3, 4, 5].shuffled()
+        let additionalElements = [10, 20, 30, 40, 50].shuffled()
+        for i in 0..<notEmptyElements.count {
+            for k in stride(from: i + 1, through: notEmptyElements.count, by: 1) {
+                let subrange = i..<k
+                sut = HeapBuffer(notEmptyElements, heapType: .maxHeap)
+                let prevElements = sut.withUnsafeBufferPointer { Array($0) }
+                let removed = Array(prevElements[subrange])
+                let allElements = prevElements.filter { !removed.contains($0) } + additionalElements
+                sut.replace(subrange: subrange, with: additionalElements)
+                XCTAssertEqual(sut.count, allElements.count)
+                sut.withUnsafeBufferPointer { buff in
+                    for element in allElements {
+                        XCTAssertTrue(buff.contains(element), "element should be in sut: \(element)\nremoved: \(removed)\nActualElements: \(Array(buff))\nsubrange: \(subrange)")
+                    }
+                    for removedElement in removed {
+                        XCTAssertFalse(buff.contains(removedElement), "element should have been removed from sut: \(removedElement)")
+                    }
+                }
+                assertHeapProperty()
+            }
+        }
+        // let's also test with a different sort:
+        for i in 0..<notEmptyElements.count {
+            for k in stride(from: i + 1, through: notEmptyElements.count, by: 1) {
+                let subrange = i..<k
+                sut = HeapBuffer(notEmptyElements, heapType: .minHeap)
+                let prevElements = sut.withUnsafeBufferPointer { Array($0) }
+                let removed = Array(prevElements[subrange])
+                let allElements = prevElements.filter { !removed.contains($0) } + additionalElements
+                sut.replace(subrange: subrange, with: additionalElements)
+                XCTAssertEqual(sut.count, allElements.count)
+                sut.withUnsafeBufferPointer { buff in
+                    for element in allElements {
+                        XCTAssertTrue(buff.contains(element), "element should be in sut: \(element)\nremoved: \(removed)\nActualElements: \(Array(buff))\nsubrange: \(subrange)")
+                    }
+                    for removedElement in removed {
+                        XCTAssertFalse(buff.contains(removedElement), "element should have been removed from sut: \(removedElement)")
+                    }
+                }
+                assertHeapProperty()
+            }
+        }
+    }
+    
     // MARK: - pushPop(_:) tests
     func testPushPop_whenIsEmptyOrElementIsHigherThanRootReturnsElement() {
         XCTAssertTrue(sut.isEmpty)
