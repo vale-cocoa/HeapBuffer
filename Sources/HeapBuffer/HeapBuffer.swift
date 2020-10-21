@@ -35,6 +35,19 @@ final public class HeapBuffer<Element> {
     /// Returns a new and empty `HeapBuffer` instance initialized to use the given sort function for ensuring the heap
     /// property on its elements and able to store contiguously the specified count of elements.
     ///
+    /// The sort closure must be a *strict weak ordering* over the elements. That
+    /// is, for any elements `a`, `b`, and `c`, the following conditions must
+    /// hold:
+    ///
+    /// - `sort(a, a)` is always `false`. (Irreflexivity)
+    /// - If `sort(a, b)` and `sort(b, c)` are
+    ///   both `true`, then `sort(a, c)` is also `true`.
+    ///   (Transitive comparability)
+    /// - Two elements are *incomparable* if neither is ordered before the other
+    ///   according to the sort closure. If `a` and `b` are incomparable, and `b`
+    ///   and `c` are incomparable, then `a` and `c` are also incomparable.
+    ///   (Transitive incomparability)
+    ///
     /// - Parameter _:  a positive `Int` value representing the minimum count of elements the new buffer can to
     ///                 store contiguously. **Must  not be negative**.
     /// - Parameter sort:   a closure that given two elements returns either `true` if they are sorted, or `false`
@@ -46,6 +59,44 @@ final public class HeapBuffer<Element> {
         self._elements = UnsafeMutablePointer<Element>.allocate(capacity: self._capacity)
         self._elementsCount = 0
         self._sort = sort
+    }
+    
+    /// Creates a new instance containing the specified number of a single,
+    /// repeated value, using the given sort function for ensuring the heap
+    /// property on its elements.
+    ///
+    /// The following example creates a max heap initialized with five strings
+    /// containing the letter *Z*.
+    ///
+    ///     let fiveZs = HeapBuffer(repeating: "Z", count: 5, sort: >)
+    ///     print(fiveZs)
+    ///     // Prints "["Z", "Z", "Z", "Z", "Z"]"
+    ///
+    /// The sort closure must be a *strict weak ordering* over the elements. That
+    /// is, for any elements `a`, `b`, and `c`, the following conditions must
+    /// hold:
+    ///
+    /// - `sort(a, a)` is always `false`. (Irreflexivity)
+    /// - If `sort(a, b)` and `sort(b, c)` are
+    ///   both `true`, then `sort(a, c)` is also `true`.
+    ///   (Transitive comparability)
+    /// - Two elements are *incomparable* if neither is ordered before the other
+    ///   according to the sort closure. If `a` and `b` are incomparable, and `b`
+    ///   and `c` are incomparable, then `a` and `c` are also incomparable.
+    ///   (Transitive incomparability)
+    ///
+    /// - Parameters:
+    ///   - repeatedValue: The element to repeat.
+    ///   - count: The number of times to repeat the value passed in the
+    ///            `repeating` parameter. `count` must be zero or greater.
+    ///   - sort: a closure that given two elements returns either `true` if they are sorted, or `false`
+    ///           if they aren't sorted.
+    public init(repeating repeatedValue: Element, count: Int, sort: @escaping (Element, Element) -> Bool) {
+        self._capacity = Self._convenientCapacityFor(capacity: count)
+        self._elements = UnsafeMutablePointer<Element>.allocate(capacity: self._capacity)
+        self._elementsCount = count
+        self._sort = sort
+        self._elements.initialize(repeating: repeatedValue, count: count)
     }
     
     deinit {
@@ -96,6 +147,19 @@ extension HeapBuffer {
     
     /// Returns a new `HeapBuffer` instance initialized to use the given sort, and containing the elements of the given
     /// sequence.
+    ///
+    /// The sort closure must be a *strict weak ordering* over the elements. That
+    /// is, for any elements `a`, `b`, and `c`, the following conditions must
+    /// hold:
+    ///
+    /// - `sort(a, a)` is always `false`. (Irreflexivity)
+    /// - If `sort(a, b)` and `sort(b, c)` are
+    ///   both `true`, then `sort(a, c)` is also `true`.
+    ///   (Transitive comparability)
+    /// - Two elements are *incomparable* if neither is ordered before the other
+    ///   according to the sort closure. If `a` and `b` are incomparable, and `b`
+    ///   and `c` are incomparable, then `a` and `c` are also incomparable.
+    ///   (Transitive incomparability)
     ///
     /// - Parameter _: a sequence of elements to store.
     /// - Parameter sort:   a closure that given two elements returns either `true` if they are sorted, or `false`
@@ -793,6 +857,35 @@ extension HeapBuffer where Element: Comparable {
             self.init(elements, sort: >)
         case .minHeap:
             self.init(elements, sort: <)
+        }
+    }
+    
+    /// Creates a new instance containing the specified number of a single,
+    /// repeated value, using as sorting criteria a default comparator on `Element`
+    /// as specified with the kind of heap order to use.
+    ///
+    /// The following example creates a max heap initialized with five strings
+    /// containing the letter *Z*.
+    ///
+    ///     let fiveZs = HeapBuffer(repeating: "Z", count: 5, heapType: .maxHeap)
+    ///     print(fiveZs)
+    ///     // Prints "["Z", "Z", "Z", "Z", "Z"]"
+    ///
+    /// - Parameters:
+    ///   - repeatedValue: The element to repeat.
+    ///   - count:  The number of times to repeat the value passed in the
+    ///             `repeating` parameter. `count` must be zero or greater.
+    ///   - heapType:   the kind of Heap ordering criteria to use.
+    ///                 When `minHeap` is specified, it would be the same as specifying `<` as
+    ///                 `sort` closure inside the default initializer `init(_:sort:)`.
+    ///                 When `maxHeap` is specified, it would be the same as specifying `>` as
+    ///                 `sort` closure inside the default initializer `init(_:sort:)`.
+    public convenience init(repeating repeatedValue: Element, count: Int, heapType: HeapType) {
+        switch heapType {
+        case .maxHeap:
+            self.init(repeating: repeatedValue, count: count, sort: >)
+        case .minHeap:
+            self.init(repeating: repeatedValue, count: count, sort: <)
         }
     }
     

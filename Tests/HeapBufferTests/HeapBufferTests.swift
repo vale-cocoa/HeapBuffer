@@ -332,6 +332,30 @@ final class HeapBufferTests: XCTestCase {
         XCTAssertGreaterThan(sortCalls, 0, "sort was not called")
     }
     
+    func testInitRepeatingCount() {
+        sut = HeapBuffer(repeating: 10, count: 10, sort: >)
+        XCTAssertNotNil(sut)
+        XCTAssertNotNil(sut._elements)
+        XCTAssertFalse(sut.isEmpty)
+        XCTAssertEqual(sut._elementsCount, 10)
+        XCTAssertGreaterThanOrEqual(sut._capacity, sut._elementsCount)
+        XCTAssertEqual(Array(UnsafeBufferPointer(start: sut._elements, count: sut._elementsCount)), Array(repeating: 10, count: 10))
+        
+        // test that sort is effectively used:
+        let exp = expectation(description: "sort called")
+        let sort: (Int, Int) -> Bool = { lhs, rhs in
+            defer {
+                exp.fulfill()
+            }
+            
+            return lhs > rhs
+        }
+        
+        sut = HeapBuffer(repeating: 10, count: 10, sort: sort)
+        XCTAssertTrue(sut._sort(10, 9))
+        wait(for: [exp], timeout: 1)
+    }
+    
     // MARK: - Deinit tests
     func testDeinit() {
         sut = nil
