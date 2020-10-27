@@ -426,7 +426,7 @@ final class HeapBufferTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(copy._capacity - copy._elementsCount, reserveCapacity)
     }
     
-    // MARK: - count, isEmpty, startIndex and endIndex variables tests
+    // MARK: - count, isEmpty, capacity, isFull, startIndex and endIndex variables tests
     func testCount() {
         XCTAssertEqual(sut._elementsCount, sut.count)
         sut.insert(10)
@@ -444,6 +444,23 @@ final class HeapBufferTests: XCTestCase {
         sut.extract()
         XCTAssertEqual(sut._elementsCount, 0)
         XCTAssertTrue(sut.isEmpty)
+    }
+    
+    func testCapacity() {
+        XCTAssertEqual(sut.capacity, sut._capacity)
+        let prevCapacity = sut._capacity
+        let newElements = 0...sut._capacity
+        sut.insert(contentsOf: newElements, at: 0)
+        XCTAssertGreaterThan(sut._capacity, prevCapacity)
+        XCTAssertEqual(sut.capacity, sut._capacity)
+    }
+    
+    func testIsFull() {
+        XCTAssertTrue(sut.isEmpty)
+        XCTAssertFalse(sut.isFull)
+        let newElements = 0..<sut._capacity
+        sut.insert(contentsOf: newElements, at: 0)
+        XCTAssertTrue(sut.isFull)
     }
     
     func testStartIndex() {
@@ -594,13 +611,13 @@ final class HeapBufferTests: XCTestCase {
         let notEmptyElements = [1, 2, 3, 4, 5].shuffled()
         
         var prevCount = sut.count
-        sut.insert(elements: [], at: sut.startIndex)
+        sut.insert(contentsOf: [], at: sut.startIndex)
         XCTAssertEqual(sut.count, prevCount)
         
         for i in 0..<notEmptyElements.count {
             sut = HeapBuffer(notEmptyElements, heapType: .maxHeap)
             prevCount = sut.count
-            sut.insert(elements: newElements, at: i)
+            sut.insert(contentsOf: newElements, at: i)
             XCTAssertEqual(sut.count, prevCount + newElements.count)
         }
         
@@ -608,7 +625,7 @@ final class HeapBufferTests: XCTestCase {
         for i in 0...notEmptyElements.count {
             sut = HeapBuffer(notEmptyElements, heapType: .maxHeap)
             prevCount = sut.count
-            sut.insert(elements: newElements, at: i)
+            sut.insert(contentsOf: newElements, at: i)
             XCTAssertEqual(sut.count, prevCount + newElements.count)
         }
     }
@@ -622,7 +639,7 @@ final class HeapBufferTests: XCTestCase {
                 XCTAssertFalse(buff.contains(newElements[i]))
             }
         }
-        sut.insert(elements: newElements, at: sut.startIndex)
+        sut.insert(contentsOf: newElements, at: sut.startIndex)
         sut.withUnsafeBufferPointer { buff in
             for i in 0..<newElements.count {
                 XCTAssertTrue(buff.contains(newElements[i]))
@@ -632,7 +649,7 @@ final class HeapBufferTests: XCTestCase {
         
         for i in 0...notEmptyElements.count {
             sut = HeapBuffer(notEmptyElements, heapType: .maxHeap)
-            sut.insert(elements: newElements, at: i)
+            sut.insert(contentsOf: newElements, at: i)
             sut.withUnsafeBufferPointer { buff in
                 for i in 0..<newElements.count {
                     XCTAssertTrue(buff.contains(newElements[i]))
@@ -647,7 +664,7 @@ final class HeapBufferTests: XCTestCase {
         // let's also test with another sort:
         for i in 0...notEmptyElements.count {
             sut = HeapBuffer(notEmptyElements, heapType: .minHeap)
-            sut.insert(elements: newElements, at: i)
+            sut.insert(contentsOf: newElements, at: i)
             sut.withUnsafeBufferPointer { buff in
                 for i in 0..<newElements.count {
                     XCTAssertTrue(buff.contains(newElements[i]))

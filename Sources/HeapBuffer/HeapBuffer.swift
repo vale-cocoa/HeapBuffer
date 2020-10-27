@@ -110,17 +110,46 @@ final public class HeapBuffer<Element> {
 extension HeapBuffer {
     /// The number of stored elements.
     ///
-    /// - Returns: a positive `Int` value representing the number of elements stored. `0` when
-    ///            `isEmpty == true`, hence when no elements are stored.
     /// - Complexity: O(1)
     public var count: Int { _elementsCount }
     
-    /// Flags if there are or not stored elements
+    /// A Boolean value indicating whether the heap buffer is empty.
     ///
-    /// - Returns: `true` when there are no elements stored, `false` when one or more elements are stored
-    ///             hence `count` is greater than `0`.
     /// - Complexity: O(1)
     public var isEmpty: Bool { _elementsCount == 0 }
+    
+    /// The total number of elements that the instance can contain without
+    /// allocating new storage.
+    ///
+    /// Every instance reserves a specific amount of memory to hold its contents.
+    /// When you add elements to a HeapBuffer instance and that instance begins to exceed its
+    /// reserved capacity, the instance allocates a larger region of memory and
+    /// copies its elements into the new storage. The new storage is a multiple
+    /// of the old storage's size. This exponential growth strategy means that
+    /// enqueueing an element happens in constant time, averaging the performance
+    /// of many enqueue operations. Enqueue operations that trigger reallocation
+    /// have a performance cost, but they occur less and less often as the instance
+    /// grows larger.
+    ///
+    /// The following example creates a HeapBuffer of integers from an array,
+    /// then enqueue the elements of another collection. Before appending, the
+    /// instance allocates new storage that is large enough store the resulting
+    /// elements.
+    ///
+    ///     let heap = HeapBuffer([10, 20, 30, 40], heaptype: .minHeap)
+    ///     // heap.count == 4
+    ///     // heap.capacity == 4
+    ///
+    ///     heap.insert(elements: [50, 60, 70, 80], at: 4)
+    ///     // numbers.count == 8
+    ///     // numbers.capacity == 8
+    /// - Complexity: O(1)
+    public var capacity: Int { _capacity }
+    
+    /// A Boolean value indicating whether the heap buffer storage is full.
+    ///
+    /// - Complexity: O(1)
+    public var isFull: Bool { _isFull }
     
     /// The position of the first element in a nonempty HeapBuffer.
     ///
@@ -341,14 +370,14 @@ extension HeapBuffer {
     
     /// Inserts given collection of elements at specified index, maintaining the heap property.
     ///
-    /// - Parameter elements: a collection of elements to insert in the callee.
+    /// - Parameter contentsOf: a collection of elements to insert in the callee.
     /// - Parameter at: the index of the callee where to start to insert the elements. **Must be positive** and in
     ///                 range `startIndex...endIndex` of the instance.
     /// - Complexity:   O(log *n*) where *n* is the count of elements of the instance after the insertion,
     ///                 when the given collection implements `withContiguousStorageIfAvailable(_:)`
     ///                 method, otherwise O(*k*\times log *n*) where *k* is the count of the elements in the given
     ///                 collection, and *n* is the count of elements of the instance after the insertion.
-    public func insert<C: Collection>(elements newElements: C, at idx: Int) where C.Iterator.Element == Element {
+    public func insert<C: Collection>(contentsOf newElements: C, at idx: Int) where C.Iterator.Element == Element {
         precondition(idx >= 0 && idx <= _elementsCount)
         
         guard !newElements.isEmpty else { return }
@@ -564,7 +593,7 @@ extension HeapBuffer {
             // It's an insertion
             guard !newElements.isEmpty else { return }
             
-            insert(elements: newElements, at: subrange.lowerBound)
+            insert(contentsOf: newElements, at: subrange.lowerBound)
         } else {
             // subrange count is greater than zero…
             if newElements.isEmpty {
